@@ -1,0 +1,69 @@
+# Python environments and cache
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Model checkpoints and datasets
+*.pth
+*.pt
+data/
+cnn_mnist/
+
+# Generated memory files and simulation outputs
+*.mem
+*.vcd
+*.log
+*.out
+
+# Common compiled simulation executables
+cnn_debug_sim
+cnn_sim
+cnn_sim_full_test
+cnn_seq_tb
+cnn_seq_compile
+mac_test
+mac_unit_tb
+real_conv_test
+rq1
+rq2
+
+# Secrets
+.env
+credentials/
+# Compiled simulation executables
+conv1_28_test
+conv1_8_test
+conv1_mnist_pool_test
+conv1_mnist_test
+conv1_pool_test
+conv1_relu_test
+conv1_seq_test
+conv2_check
+conv2_mnist_test
+conv2_ref_test
+conv2_seq_test
+conv2_single_test
+conv2_test
+conv5_real_test
+conv5_test
+conv_test
+fc_check
+fc_image726_sim
+fc_ref_test
+fc_seq_test
+fc_test
+maxpool2_image726_sim
+maxpool2_test
+maxpool_test
+relu_28_test
+relu_test
+
+# Temporary files and generated results
+*~
+*.save
+comparison_results.csv
+full_mnist_results.csv
+test_results.csv
+*_reference.txt
+*_backup.v
