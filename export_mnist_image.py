@@ -1,5 +1,8 @@
+
 import torch
 from torchvision import datasets, transforms
+
+INPUT_SCALE = 45.011730688743526
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -15,16 +18,16 @@ dataset = datasets.MNIST(
 
 image, label = dataset[0]
 
-input_max = torch.max(torch.abs(image))
-input_scale = 127.0 / input_max
-
-q_image = torch.round(image * input_scale)
-q_image = q_image.clamp(-128, 127).to(torch.int8)
+q_image = torch.round(
+    image.to(torch.float64) * INPUT_SCALE
+).clamp(-127, 127).to(torch.int8)
 
 with open("mnist_image.mem", "w") as f:
-    for value in q_image.flatten():
-        f.write(format(int(value) & 0xFF, "02X") + "\n")
+    for value in q_image.flatten().tolist():
+        f.write(f"{int(value) & 0xFF:02X}\n")
 
 print("Label:", label)
+print("Fixed input scale:", INPUT_SCALE)
 print("Saved: mnist_image.mem")
 print("Pixel count:", q_image.numel())
+print("Quantized range:", int(q_image.min()), "to", int(q_image.max()))

@@ -20,15 +20,19 @@ module cnn_top_sequential_tb;
     wire [3:0] predicted_digit;
     wire signed [63:0] scores [0:9];
 
+    reg signed [31:0] reference_conv2 [0:3135];
+    reg signed [31:0] reference_pool2 [0:783];
+    reg signed [31:0] reference_fc_input [0:783];
     reg signed [63:0] reference_scores [0:9];
-    reg signed [31:0] expected_fc_input [0:783];
 
     integer i;
     integer cycles;
-    integer score_errors;
-    integer input_errors;
-    integer ref_file;
     integer scan_result;
+    integer ref_file;
+    integer conv2_errors;
+    integer pool2_errors;
+    integer fc_input_errors;
+    integer score_errors;
 
     cnn_top_sequential dut (
         .clk(clk),
@@ -60,29 +64,59 @@ module cnn_top_sequential_tb;
         $readmemh("fc_weights.mem", fc_weights);
         $readmemh("fc_bias_int32.mem", fc_biases);
 
-        // Read expected FC inputs as DECIMAL values.
-        ref_file = $fopen("fc_input_requantized.mem", "r");
+        // Read Conv2 reference outputs as decimal values.
+        ref_file = $fopen("conv2_reference.mem", "r");
+        if (ref_file == 0) begin
+            $display("ERROR: Cannot open conv2_reference.mem");
+            $finish;
+        end
 
+        for (i = 0; i < 3136; i = i + 1) begin
+            scan_result = $fscanf(ref_file, "%d", reference_conv2[i]);
+            if (scan_result != 1) begin
+                $display("ERROR reading Conv2 reference index %0d", i);
+                $fclose(ref_file);
+                $finish;
+            end
+        end
+        $fclose(ref_file);
+
+        // Read Pool2 reference outputs.
+        ref_file = $fopen("conv2_pool_output.mem", "r");
+        if (ref_file == 0) begin
+            $display("ERROR: Cannot open conv2_pool_output.mem");
+            $finish;
+        end
+
+        for (i = 0; i < 784; i = i + 1) begin
+            scan_result = $fscanf(ref_file, "%d", reference_pool2[i]);
+            if (scan_result != 1) begin
+                $display("ERROR reading Pool2 reference index %0d", i);
+                $fclose(ref_file);
+                $finish;
+            end
+        end
+        $fclose(ref_file);
+
+        // Read expected FC input values.
+        ref_file = $fopen("fc_input_requantized.mem", "r");
         if (ref_file == 0) begin
             $display("ERROR: Cannot open fc_input_requantized.mem");
             $finish;
         end
 
         for (i = 0; i < 784; i = i + 1) begin
-            scan_result = $fscanf(ref_file, "%d", expected_fc_input[i]);
-
+            scan_result = $fscanf(ref_file, "%d", reference_fc_input[i]);
             if (scan_result != 1) begin
-                $display("ERROR: Failed to read FC input %0d", i);
+                $display("ERROR reading FC input reference index %0d", i);
                 $fclose(ref_file);
                 $finish;
             end
         end
-
         $fclose(ref_file);
 
-        // Read reference FC scores as DECIMAL values.
+        // Read reference FC scores.
         ref_file = $fopen("fc_output.mem", "r");
-
         if (ref_file == 0) begin
             $display("ERROR: Cannot open fc_output.mem");
             $finish;
@@ -90,21 +124,18 @@ module cnn_top_sequential_tb;
 
         for (i = 0; i < 10; i = i + 1) begin
             scan_result = $fscanf(ref_file, "%d", reference_scores[i]);
-
             if (scan_result != 1) begin
-                $display("ERROR: Failed to read reference score %0d", i);
+                $display("ERROR reading FC score reference %0d", i);
                 $fclose(ref_file);
                 $finish;
             end
         end
-
         $fclose(ref_file);
 
-        // Reset the CNN.
+        // Reset and start CNN.
         repeat (5) @(negedge clk);
         rst = 0;
 
-        // Start the CNN for one clock cycle.
         @(negedge clk);
         start = 1;
 
@@ -114,8 +145,6 @@ module cnn_top_sequential_tb;
         $display("Running complete sequential CNN...");
 
         cycles = 0;
-
-        // Check done on the falling edge to avoid missing its pulse.
         while ((done !== 1'b1) && (cycles < 500000)) begin
             @(negedge clk);
             cycles = cycles + 1;
@@ -123,7 +152,7 @@ module cnn_top_sequential_tb;
 
         if (done !== 1'b1) begin
             $display("FAIL: Timeout waiting for CNN completion.");
-            $display("Cycles: %0d, busy=%b", cycles, busy);
+            $display("Cycles=%0d busy=%b", cycles, busy);
             $finish;
         end
 
@@ -131,57 +160,86 @@ module cnn_top_sequential_tb;
         $display("CNN completed in %0d cycles", cycles);
         $display("Predicted digit: %0d", predicted_digit);
 
-        // Compare final requantized FC inputs.
-        $display("");
-        $display("FC input comparison:");
+        // Compare Conv2 outputs.
+        conv2_errors = 0;
+        for (i = 0; i < 3136; i = i + 1) begin
+            if ($signed(dut.conv2_memory[i]) !== reference_conv2[i]) begin
+                if (conv2_errors < 10)
+                    $display("Conv2[%0d]: RTL=%0d REF=%0d",
+                        i, $signed(dut.conv2_memory[i]),
+                        reference_conv2[i]);
+                conv2_errors = conv2_errors + 1;
+            end
+        end
 
-        input_errors = 0;
-
+        // Compare Pool2 outputs.
+        pool2_errors = 0;
         for (i = 0; i < 784; i = i + 1) begin
-            if ($signed(dut.fc_input8[i]) !== expected_fc_input[i]) begin
-                if (input_errors < 10) begin
-                    $display(
-                        "Mismatch at %0d: RTL=%0d Reference=%0d",
-                        i,
-                        $signed(dut.fc_input8[i]),
-                        expected_fc_input[i]
-                    );
-                end
-
-                input_errors = input_errors + 1;
+            if ($signed(dut.pool2_memory[i]) !== reference_pool2[i]) begin
+                if (pool2_errors < 10)
+                    $display("Pool2[%0d]: RTL=%0d REF=%0d",
+                        i, $signed(dut.pool2_memory[i]),
+                        reference_pool2[i]);
+                pool2_errors = pool2_errors + 1;
             end
         end
 
-        $display("FC input mismatches: %0d / 784", input_errors);
-
-        // Compare all ten final FC scores.
+        // Print a small sample to locate the first divergence.
         $display("");
-        $display("Score comparison:");
-
-        score_errors = 0;
-
-        for (i = 0; i < 10; i = i + 1) begin
+        $display("First 25 values:");
+        for (i = 0; i < 25; i = i + 1) begin
             $display(
-                "Digit %0d: RTL=%0d Reference=%0d",
-                i, scores[i], reference_scores[i]
+                "i=%0d conv2_RTL=%0d conv2_REF=%0d pool2_RTL=%0d pool2_REF=%0d fc_RTL=%0d fc_REF=%0d",
+                i,
+                $signed(dut.conv2_memory[i]),
+                reference_conv2[i],
+                $signed(dut.pool2_memory[i]),
+                reference_pool2[i],
+                $signed(dut.fc_input8[i]),
+                reference_fc_input[i]
             );
+        end
 
-            if (scores[i] !== reference_scores[i]) begin
-                score_errors = score_errors + 1;
-                $display("  MISMATCH at digit %0d", i);
+        // Compare FC inputs.
+        fc_input_errors = 0;
+        for (i = 0; i < 784; i = i + 1) begin
+            if ($signed(dut.fc_input8[i]) !== reference_fc_input[i]) begin
+                if (fc_input_errors < 10)
+                    $display("FC input[%0d]: RTL=%0d REF=%0d",
+                        i, $signed(dut.fc_input8[i]),
+                        reference_fc_input[i]);
+                fc_input_errors = fc_input_errors + 1;
             end
         end
 
-        $display("");
-        $display("FC input mismatches: %0d / 784", input_errors);
-        $display("Score mismatches: %0d / 10", score_errors);
+        // Compare FC scores.
+        score_errors = 0;
+        for (i = 0; i < 10; i = i + 1) begin
+            $display("Digit %0d: RTL=%0d REF=%0d",
+                i, scores[i], reference_scores[i]);
 
-        if ((input_errors == 0) && (score_errors == 0))
+            if (scores[i] !== reference_scores[i])
+                score_errors = score_errors + 1;
+        end
+
+        $display("");
+        $display("============== SUMMARY ==============");
+        $display("Conv2 mismatches:    %0d / 3136", conv2_errors);
+        $display("Pool2 mismatches:    %0d / 784", pool2_errors);
+        $display("FC input mismatches: %0d / 784", fc_input_errors);
+        $display("Score mismatches:    %0d / 10", score_errors);
+
+        if ((conv2_errors == 0) &&
+            (pool2_errors == 0) &&
+            (fc_input_errors == 0) &&
+            (score_errors == 0))
             $display("PASS: COMPLETE CNN MATCHES REFERENCE");
         else
             $display("FAIL: DIFFERENCES FOUND");
 
+        $display("=====================================");
         $finish;
     end
 
 endmodule
+

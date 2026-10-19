@@ -3,7 +3,7 @@ import numpy as np
 
 # Fixed multipliers from calibration
 INPUT_SCALE = 45.011730688743526
-CONV1_WEIGHT_SCALE = 142.15939190898197
+CONV1_WEIGHT_SCALE = 177.25626334908588
 POOL1_SCALE = 18.25425611513592
 
 # Load verified Conv1 + ReLU + MaxPool outputs.

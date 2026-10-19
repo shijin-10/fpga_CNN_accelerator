@@ -116,7 +116,7 @@ module cnn_top_sequential (
 
     requantize_array #(
         .N(1568),
-        .MULTIPLIER(64'd3063111),
+        .MULTIPLIER(64'd2456613),
         .SHIFT(30)
     ) requantize1_unit (
         .input_data(pool1_memory),
@@ -163,7 +163,7 @@ module cnn_top_sequential (
 
     requantize_array #(
         .N(784),
-        .MULTIPLIER(64'd2850408),
+        .MULTIPLIER(64'd2658134),
         .SHIFT(30)
     ) requantize2_unit (
         .input_data(pool2_memory),

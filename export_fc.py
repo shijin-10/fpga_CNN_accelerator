@@ -13,50 +13,43 @@ model.load_state_dict(
 )
 model.eval()
 
-# Current quantization multipliers from Conv2
-conv2_input_multiplier = 19.55748730611678
-conv2_weight_multiplier = 241.5322203712151
+# Must match validate_fixed_pipeline.py
+POOL2_SCALE = 11.704324914902063
 
-# Conv2 output accumulator multiplier relative to real values
-fc_input_multiplier = (
-    conv2_input_multiplier * conv2_weight_multiplier
-)
-
-# FC weights: [10, 784]
+# FC weights and biases from trained model
 fc_weights = model.fc.weight.detach()
 fc_bias = model.fc.bias.detach()
 
-# Symmetric INT8 quantization of FC weights
-fc_weight_multiplier = 127.0 / fc_weights.abs().max().item()
+# Symmetric INT8 weight quantization
+fc_weight_scale = 127.0 / fc_weights.abs().max().item()
 
 q_fc_weights = torch.round(
-    fc_weights * fc_weight_multiplier
+    fc_weights * fc_weight_scale
 ).clamp(-127, 127).to(torch.int8)
 
-# Bias scale matches FC input and FC weight scales
-bias_multiplier = fc_input_multiplier * fc_weight_multiplier
+# Bias must use the FC input scale and FC weight scale
+bias_scale = POOL2_SCALE * fc_weight_scale
 
 q_fc_bias = torch.round(
-    fc_bias * bias_multiplier
+    fc_bias * bias_scale
 ).to(torch.int32)
 
-print("FC input multiplier:", fc_input_multiplier)
-print("FC weight multiplier:", fc_weight_multiplier)
-print("FC bias multiplier:", bias_multiplier)
+print("FC input scale:", POOL2_SCALE)
+print("FC weight scale:", fc_weight_scale)
+print("FC bias scale:", bias_scale)
 print("FC weight shape:", tuple(q_fc_weights.shape))
 print("FC bias count:", len(q_fc_bias))
 print("FC bias values:", q_fc_bias.tolist())
 
-# Export weights as signed INT8 hexadecimal
+# Export signed INT8 weights as hexadecimal
 with open("fc_weights.mem", "w") as f:
     for value in q_fc_weights.reshape(-1).tolist():
         f.write(f"{int(value) & 0xFF:02X}\n")
 
-# Export biases as signed INT32 hexadecimal
+# Export signed INT32 biases as hexadecimal
 with open("fc_bias_int32.mem", "w") as f:
     for value in q_fc_bias.tolist():
         f.write(f"{int(value) & 0xFFFFFFFF:08X}\n")
 
 print("\nSaved fc_weights.mem")
 print("Saved fc_bias_int32.mem")
-
